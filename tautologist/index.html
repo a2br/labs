@@ -1,0 +1,425 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Tautologist</title>
+<meta name="description" content="Watch a propositional formula rewrite itself, one rule at a time — if-elimination, NNF, DNF/CNF — and get a verdict: tautology or not.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⇒</text></svg>">
+<style>body{margin:0}</style>
+
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+:root{
+  --paper:#FBFAF5; --dot:#D9D6CB; --ink:#22242C; --ink-2:#6B6E7A; --card:#FFFFFF; --rule:#E4E1D6;
+  --and:#3DAA5C; --or:#F28C28; --not:#9B59D0; --imp:#2E86DE; --ite:#E5477F; --lit:#22242C;
+  --hl:#FFE066; --hl2:#B8F0C8; --chip:#EFEDE4; --chip-on:#22242C; --chip-on-ink:#FFFFFF;
+  --ok:#2F9E5A; --bad:#D9483B; --shadow:0 2px 0 #D9D6CB; --strip:#C9C6BA;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --paper:#171A24; --dot:#2A2E3C; --ink:#EEEEF3; --ink-2:#A0A4B4; --card:#1F2331; --rule:#323748;
+  --and:#5FD07F; --or:#FFA54A; --not:#C08AF0; --imp:#66AEF5; --ite:#FF6F9F; --lit:#EEEEF3;
+  --hl:#6E5A10; --hl2:#1F5A33; --chip:#2A2F40; --chip-on:#EEEEF3; --chip-on-ink:#171A24; --shadow:0 2px 0 #0F111A; --strip:#3A4052;
+}}
+:root[data-theme="dark"]{
+  --paper:#171A24; --dot:#2A2E3C; --ink:#EEEEF3; --ink-2:#A0A4B4; --card:#1F2331; --rule:#323748;
+  --and:#5FD07F; --or:#FFA54A; --not:#C08AF0; --imp:#66AEF5; --ite:#FF6F9F; --lit:#EEEEF3;
+  --hl:#6E5A10; --hl2:#1F5A33; --chip:#2A2F40; --chip-on:#EEEEF3; --chip-on-ink:#171A24; --shadow:0 2px 0 #0F111A; --strip:#3A4052;
+}
+*{box-sizing:border-box}
+body{margin:0;padding-inline:16px;padding-block:28px 80px;color:var(--ink);font-family:"Nunito",system-ui,sans-serif;font-size:16px;line-height:1.5;
+  background:var(--paper) radial-gradient(var(--dot) 1px,transparent 1.2px) 0 0/22px 22px}
+.wrap{max-width:960px;margin:0 auto}
+h1{font-family:"Fredoka",sans-serif;font-weight:700;font-size:2.2rem;margin:0;letter-spacing:-.01em}
+h1 span{color:var(--or)}
+.sub{color:var(--ink-2);margin:2px 0 18px}
+.inbox{background:var(--card);border:2px solid var(--ink);border-radius:14px;box-shadow:var(--shadow);padding:10px 14px;display:flex;gap:10px;align-items:center}
+.inbox input{flex:1;min-width:0;border:0;background:transparent;color:var(--ink);font:500 18px/1.4 "JetBrains Mono",monospace;outline:none}
+.inbox button{font:700 15px "Fredoka",sans-serif;background:var(--imp);color:#fff;border:0;border-radius:10px;padding:8px 16px;cursor:pointer}
+button:focus-visible,input:focus-visible{outline:3px solid var(--or);outline-offset:2px}
+.err{color:var(--bad);font-size:14px;min-height:1.3em;margin:6px 4px 0}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:12px 0}
+.row .lbl{font:600 12px "Nunito";letter-spacing:.1em;text-transform:uppercase;color:var(--ink-2);margin-right:2px}
+.chip{font:600 14px "Nunito";background:var(--chip);color:var(--ink);border:0;border-radius:999px;padding:5px 13px;cursor:pointer}
+.chip.on{background:var(--chip-on);color:var(--chip-on-ink)}
+.help{font-size:13px;color:var(--ink-2);margin:4px 4px 0}
+.help code{font-family:"JetBrains Mono",monospace}
+
+/* stage */
+.card{background:var(--card);border:2px solid var(--ink);border-radius:16px;box-shadow:var(--shadow);overflow:hidden}
+#formula{font:500 17px/1.7 "JetBrains Mono",monospace;padding:14px 18px 8px;overflow-x:auto;white-space:nowrap;min-height:2.6em}
+#stage{height:min(400px,55vh);padding:0 10px}
+#stage svg{width:100%;height:100%;display:block}
+.bar{display:flex;align-items:center;gap:10px;padding:10px 14px;border-top:1px solid var(--rule)}
+.bar button{font:700 14px "Fredoka",sans-serif;width:38px;height:34px;border-radius:10px;border:2px solid var(--ink);background:var(--card);color:var(--ink);cursor:pointer}
+.bar button#play{background:var(--ink);color:var(--card)}
+.scrubwrap{flex:1;position:relative;height:34px;display:flex;align-items:center}
+#scrubbg{position:absolute;left:0;right:0;height:8px;border-radius:4px;opacity:.55}
+#scrub{-webkit-appearance:none;appearance:none;width:100%;background:transparent;margin:0;position:relative}
+#scrub::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:var(--card);border:3px solid var(--ink);cursor:pointer}
+#scrub::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:var(--card);border:3px solid var(--ink);cursor:pointer}
+#stepno{font:700 13px "JetBrains Mono",monospace;color:var(--ink-2);min-width:5.5em;text-align:right}
+#why{padding:8px 18px 12px;font-size:14px;color:var(--ink-2);height:2.6em;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+#why b{color:var(--ink);text-transform:uppercase;letter-spacing:.08em;font:700 12px "Fredoka",sans-serif;margin-right:6px}
+#why i{display:inline-block;width:10px;height:10px;border-radius:3px;background:var(--c);margin-right:6px;vertical-align:-1px}
+/* formula spans */
+.t{border-radius:6px;padding:0 1px}
+.t.hov{background:var(--hl)}
+.t.contractum{background:var(--hl2);box-shadow:0 0 0 2px var(--hl2)}
+.op{font-weight:700}
+.op.and{color:var(--and)}.op.or{color:var(--or)}.op.not{color:var(--not)}.op.imp,.op.iff{color:var(--imp)}.op.ite{color:var(--ite)}
+.v{color:var(--lit)} .k{color:var(--ink-2)}
+/* tree */
+.tn text{font:700 13px "JetBrains Mono",monospace;fill:#fff;text-anchor:middle;dominant-baseline:central;pointer-events:none}
+.tn text.lit{fill:var(--ink);font-weight:500}
+.tn.ite circle{fill:var(--ite)}.tn.and circle{fill:var(--and)}.tn.or circle{fill:var(--or)}.tn.not circle{fill:var(--not)}.tn.imp circle,.tn.iff circle{fill:var(--imp)}
+.tn.var circle,.tn.const circle{fill:var(--card);stroke:var(--ink);stroke-width:1.5}
+.tn.ghost circle{fill:var(--strip)!important;stroke:none}
+.te{stroke:var(--ink-2);stroke-width:1.6;fill:none}
+.blob{fill:var(--hl2)}
+
+/* layout */
+.main{display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:18px;align-items:start;margin-top:22px}
+@media (max-width:860px){.main{grid-template-columns:1fr}}
+.side{display:flex;flex-direction:column;gap:14px;position:sticky;top:env(safe-area-inset-top,0px)}
+@media (max-width:860px){.side{position:static}}
+.cap{font:700 11px "Fredoka",sans-serif;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-2)}
+/* strata (timeline inside the stage card) */
+.strata-wrap{border-top:1px solid var(--rule);padding:10px 18px 14px}
+.strata-wrap .cap{margin-bottom:8px}
+#strata{display:flex;flex-direction:column;gap:2px;align-items:center}
+.srow{display:flex;gap:1px;height:8px;border-radius:3px;overflow:hidden;cursor:pointer;opacity:.8;transition:transform .12s,opacity .12s}
+.srow:hover,.srow.on{opacity:1;transform:scaleY(1.8)}
+.srow.on{outline:2px solid var(--ink);outline-offset:1px}
+.srow i{display:block;height:100%;background:var(--strip)}
+.srow i.and{background:var(--and)}.srow i.or{background:var(--or)}.srow i.not{background:var(--not)}.srow i.imp,.srow i.iff{background:var(--imp)}.srow i.ite{background:var(--ite)}
+.srow i.var{background:var(--ink-2);opacity:.7}.srow i.const{background:var(--ink)}.srow i.k{background:var(--strip);opacity:.5}
+.srow i.c{filter:brightness(1.25) saturate(1.3);box-shadow:inset 0 -3px 0 var(--hl)}
+.legend{display:flex;flex-wrap:wrap;gap:6px 12px;font-size:12px;color:var(--ink-2);padding:0 4px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;vertical-align:-1px;margin-right:4px;background:var(--c)}
+/* verdict + truth table */
+.verdict{font:700 22px/1.2 "Fredoka",sans-serif;padding:14px 16px;border-radius:14px;background:var(--card);box-shadow:var(--shadow);border:2px solid var(--ink)}
+.verdict.ok{border-color:var(--ok);color:var(--ok)} .verdict.bad{border-color:var(--bad);color:var(--bad)}
+.verdict small{display:block;font:600 13px/1.4 "Nunito";color:var(--ink-2);margin-top:4px}
+.tcard{padding:12px 12px 8px;margin:0}
+.tcard .cap{margin-bottom:6px}
+#tt{max-height:320px;overflow:auto}
+table{border-collapse:separate;border-spacing:0;font:500 14px "JetBrains Mono",monospace;width:100%}
+th{font:700 12px "Fredoka",sans-serif;padding:6px 8px;background:var(--chip);position:sticky;top:0}
+td{padding:4px 8px;text-align:center;border-top:1px solid var(--rule)}
+td.one{color:var(--ok);font-weight:700} td.zero{color:var(--ink-2)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+<h1>Tauto<span>logist</span></h1>
+<p class="sub">Feed it a formula. It rewrites it one rule at a time, live, and tells you whether it is a tautology.</p>
+
+<div class="inbox">
+  <input id="src" spellcheck="false" autocomplete="off" placeholder="if a || b then (if b && !a then b && c else !b && c) else c">
+  <button id="run" type="button">Rewrite</button>
+</div>
+<div class="err" id="err"></div>
+<div class="row"><span class="lbl">to</span>
+  <button class="chip on" data-target="dnf" type="button">DNF</button>
+  <button class="chip" data-target="cnf" type="button">CNF</button>
+  <button class="chip" data-target="nnf" type="button">NNF</button>
+  <button class="chip" id="neg" type="button">¬ first (refute)</button>
+</div>
+<div class="row"><span class="lbl">try</span>
+  <button class="chip ex" type="button" data-src="if a || b then (if b && !a then b && c else !b && c) else c">ex3 f1</button>
+  <button class="chip ex" type="button" data-src="if c then (if a then !b else true) else false">ex3 f2</button>
+  <button class="chip ex" type="button" data-src="((a -> b) -> a) -> a" data-neg="1">ex2.1</button>
+  <button class="chip ex" type="button" data-src="!(a && b) -> (!a || !b)" data-neg="1">ex2.2</button>
+  <button class="chip ex" type="button" data-src="((!a -> b) && (a -> b)) -> b" data-neg="1">ex2.3</button>
+  <button class="chip ex" type="button" data-src="!(((a || !b) && !(b -> c)) -> a)" data-target="cnf">ex13</button>
+</div>
+<p class="help"><code>if C then X else Y</code> · <code>&amp;&amp; ∧ and</code> · <code>|| ∨ or</code> · <code>! ¬ not</code> · <code>-&gt; →</code> (right-assoc) · <code>&lt;-&gt; ↔</code> · <code>true false 0 1</code> · keys: ← → space</p>
+
+<div class="main">
+  <div class="card stage-card">
+    <div id="formula"></div>
+    <div id="stage"></div>
+    <div class="bar">
+      <button id="prev" type="button" title="previous">‹</button>
+      <button id="play" type="button" title="play / pause">▶</button>
+      <button id="next" type="button" title="next">›</button>
+      <div class="scrubwrap"><div id="scrubbg"></div><input id="scrub" type="range" min="0" max="0" value="0"></div>
+      <span id="stepno">0 / 0</span>
+    </div>
+    <div id="why"></div>
+    <div class="strata-wrap">
+      <div class="cap">timeline · one strip per step · width = formula length · bright = what the step produced</div>
+      <div id="strata"></div>
+    </div>
+  </div>
+  <aside class="side">
+    <div id="verdict"></div>
+    <div class="card tcard"><div class="cap">truth table of the input</div><div id="tt"></div></div>
+    <div class="legend"><span><i style="--c:var(--ite)"></i>if</span><span><i style="--c:var(--imp)"></i>→ ↔</span><span><i style="--c:var(--not)"></i>¬</span><span><i style="--c:var(--and)"></i>∧</span><span><i style="--c:var(--or)"></i>∨</span><span><i style="--c:var(--ink-2)"></i>variable</span><span><i style="--c:var(--ink)"></i>0 / 1</span></div>
+  </aside>
+</div>
+</div>
+
+<script>
+
+// ---- AST ----
+const V=n=>({t:'var',n}),C=v=>({t:'const',v}),NOT=a=>({t:'not',a}),AND=(a,b)=>({t:'and',a,b}),OR=(a,b)=>({t:'or',a,b}),
+      IMP=(a,b)=>({t:'imp',a,b}),IFF=(a,b)=>({t:'iff',a,b}),ITE=(c,a,b)=>({t:'ite',c,a,b});
+const kids=n=>n.t==='ite'?['c','a','b']:n.t==='not'?['a']:(n.t==='var'||n.t==='const')?[]:['a','b'];
+const eq=(x,y)=>x.t===y.t&&(x.t==='var'?x.n===y.n:x.t==='const'?x.v===y.v:kids(x).every(k=>eq(x[k],y[k])));
+const set=(n,p,v)=>p.length?{...n,[p[0]]:set(n[p[0]],p.slice(1),v)}:v;
+
+// ---- Parser ----
+function tokenize(s){const T=[];let i=0;
+  const sym=[['<->','iff'],['↔','iff'],['<=>','iff'],['->','imp'],['→','imp'],['=>','imp'],['&&','and'],['∧','and'],['&','and'],['||','or'],['∨','or'],['|','or'],['!','not'],['¬','not'],['~','not'],['(','('],[')',')']];
+  while(i<s.length){const ch=s[i]; if(/\s/.test(ch)){i++;continue;}
+    const m=sym.find(([t])=>s.startsWith(t,i)); if(m){T.push({k:m[1],pos:i});i+=m[0].length;continue;}
+    if(/[A-Za-z_0-9]/.test(ch)){let j=i;while(j<s.length&&/[A-Za-z_0-9']/.test(s[j]))j++;const w=s.slice(i,j).toLowerCase();
+      const kw={if:'if',then:'then',else:'else',and:'and',or:'or',not:'not',true:'true',false:'false','1':'true','0':'false'};
+      T.push(kw[w]?{k:kw[w],pos:i}:{k:'id',v:s.slice(i,j),pos:i});i=j;continue;}
+    throw new Error(`unexpected "${ch}" at ${i}`);}
+  T.push({k:'eof',pos:s.length});return T;}
+function parse(src){const T=tokenize(src);let p=0;const pk=()=>T[p],nx=()=>T[p++];
+  const ex=k=>{const t=nx();if(t.k!==k)throw new Error(`expected ${k} at ${t.pos}`);};
+  const expr=()=>{let l=imp();while(pk().k==='iff'){nx();l=IFF(l,imp());}return l;};
+  const imp=()=>{const l=or();if(pk().k==='imp'){nx();return IMP(l,imp());}return l;};
+  const or=()=>{let l=and();while(pk().k==='or'){nx();l=OR(l,and());}return l;};
+  const and=()=>{let l=not();while(pk().k==='and'){nx();l=AND(l,not());}return l;};
+  const not=()=>pk().k==='not'?(nx(),NOT(not())):atom();
+  const atom=()=>{const t=nx();
+    if(t.k==='id')return V(t.v);if(t.k==='true')return C(1);if(t.k==='false')return C(0);
+    if(t.k==='('){const e=expr();ex(')');return e;}
+    if(t.k==='if'){const c=expr();ex('then');const a=expr();ex('else');const b=expr();return ITE(c,a,b);}
+    throw new Error(`unexpected token at ${t.pos}`);};
+  const e=expr();if(pk().k!=='eof')throw new Error(`unexpected input at ${pk().pos}`);return e;}
+
+// ---- Rules ----
+const isLit=n=>n.t==='var'||(n.t==='not'&&n.a.t==='var');
+const lk=n=>n.t==='var'?'+'+n.n:'-'+n.a.n;
+const flat=(n,op)=>n.t===op?[...flat(n.a,op),...flat(n.b,op)]:[n];
+const compl=l=>{const s=new Set(l.map(lk));return l.some(x=>s.has((lk(x)[0]==='+'?'-':'+')+lk(x).slice(1)));};
+const dup=l=>new Set(l.map(lk)).size<l.length;
+const dedup=(l,key)=>{const s=new Set(),o=[];for(const x of l){const k=key(x);if(!s.has(k)){s.add(k);o.push(x);}}return o;};
+const rebuild=(l,op)=>l.reduce((a,b)=>op==='and'?AND(a,b):OR(a,b));
+const tkey=(n,op)=>{const l=flat(n,op);return l.every(isLit)?l.map(lk).sort().join(' '):null;};
+const dupT=(l,op)=>{const ks=l.map(t=>tkey(t,op));return !ks.includes(null)&&new Set(ks).size<ks.length;};
+const R={
+ ite:[n=>n.t==='ite'&&[OR(AND(n.c,n.a),AND(NOT(n.c),n.b)),'if C then X else Y ⇒ (C∧X) ∨ (¬C∧Y)']],
+ arrows:[n=>n.t==='imp'&&[OR(NOT(n.a),n.b),'X→Y ⇒ ¬X ∨ Y'],
+         n=>n.t==='iff'&&[OR(AND(n.a,n.b),AND(NOT(n.a),NOT(n.b))),'X↔Y ⇒ (X∧Y) ∨ (¬X∧¬Y)']],
+ nnf:[n=>n.t==='not'&&n.a.t==='not'&&[n.a.a,'¬¬X ⇒ X'],
+      n=>n.t==='not'&&n.a.t==='and'&&[OR(NOT(n.a.a),NOT(n.a.b)),'¬(X∧Y) ⇒ ¬X∨¬Y · De Morgan'],
+      n=>n.t==='not'&&n.a.t==='or'&&[AND(NOT(n.a.a),NOT(n.a.b)),'¬(X∨Y) ⇒ ¬X∧¬Y · De Morgan'],
+      n=>n.t==='not'&&n.a.t==='const'&&[C(1-n.a.v),`¬${n.a.v} ⇒ ${1-n.a.v}`]],
+ simplify:[
+  n=>n.t==='and'&&n.a.t==='const'&&[n.a.v?n.b:C(0),n.a.v?'1∧X ⇒ X':'0∧X ⇒ 0'],
+  n=>n.t==='and'&&n.b.t==='const'&&[n.b.v?n.a:C(0),n.b.v?'X∧1 ⇒ X':'X∧0 ⇒ 0'],
+  n=>n.t==='or'&&n.a.t==='const'&&[n.a.v?C(1):n.b,n.a.v?'1∨X ⇒ 1':'0∨X ⇒ X'],
+  n=>n.t==='or'&&n.b.t==='const'&&[n.b.v?C(1):n.a,n.b.v?'X∨1 ⇒ 1':'X∨0 ⇒ X'],
+  n=>n.t==='not'&&n.a.t==='const'&&[C(1-n.a.v),`¬${n.a.v} ⇒ ${1-n.a.v}`],
+  n=>n.t==='not'&&n.a.t==='not'&&[n.a.a,'¬¬X ⇒ X'],
+  n=>(n.t==='and'||n.t==='or')&&eq(n.a,n.b)&&[n.a,'X'+(n.t==='and'?'∧':'∨')+'X ⇒ X · idempotence'],
+  n=>n.t==='and'&&flat(n,'and').every(isLit)&&compl(flat(n,'and'))&&[C(0),'term has X and ¬X ⇒ 0'],
+  n=>n.t==='or'&&flat(n,'or').every(isLit)&&compl(flat(n,'or'))&&[C(1),'clause has X and ¬X ⇒ 1'],
+  n=>n.t==='and'&&flat(n,'and').every(isLit)&&dup(flat(n,'and'))&&[rebuild(dedup(flat(n,'and'),lk),'and'),'drop repeated literal'],
+  n=>n.t==='or'&&flat(n,'or').every(isLit)&&dup(flat(n,'or'))&&[rebuild(dedup(flat(n,'or'),lk),'or'),'drop repeated literal'],
+  n=>n.t==='or'&&dupT(flat(n,'or'),'and')&&[rebuild(dedup(flat(n,'or'),t=>tkey(t,'and')),'or'),'drop repeated term'],
+  n=>n.t==='and'&&n.b.t==='and'&&[AND(AND(n.a,n.b.a),n.b.b),'X∧(Y∧Z) ⇒ (X∧Y)∧Z · associativity'],
+  n=>n.t==='or'&&n.b.t==='or'&&[OR(OR(n.a,n.b.a),n.b.b),'X∨(Y∨Z) ⇒ (X∨Y)∨Z · associativity'],
+  n=>n.t==='and'&&dupT(flat(n,'and'),'or')&&[rebuild(dedup(flat(n,'and'),t=>tkey(t,'or')),'and'),'drop repeated clause']],
+ dnf:[n=>n.t==='and'&&n.b.t==='or'&&[OR(AND(n.a,n.b.a),AND(n.a,n.b.b)),'X∧(Y∨Z) ⇒ (X∧Y)∨(X∧Z) · distribute'],
+      n=>n.t==='and'&&n.a.t==='or'&&[OR(AND(n.a.a,n.b),AND(n.a.b,n.b)),'(X∨Y)∧Z ⇒ (X∧Z)∨(Y∧Z) · distribute']],
+ cnf:[n=>n.t==='or'&&n.b.t==='and'&&[AND(OR(n.a,n.b.a),OR(n.a,n.b.b)),'X∨(Y∧Z) ⇒ (X∨Y)∧(X∨Z) · distribute'],
+      n=>n.t==='or'&&n.a.t==='and'&&[AND(OR(n.a.a,n.b),OR(n.a.b,n.b)),'(X∧Y)∨Z ⇒ (X∨Z)∧(Y∨Z) · distribute']]};
+const PHCOL={negate:'var(--not)',ite:'var(--ite)',arrows:'var(--imp)',nnf:'var(--not)',simplify:'var(--ink-2)',dnf:'var(--or)',cnf:'var(--and)'};
+function find(n,rules,order,path=[]){
+  const here=()=>{for(const r of rules){const x=r(n);if(x)return{path,x};}return null;};
+  if(order==='pre'){const h=here();if(h)return h;}
+  for(const k of kids(n)){const f=find(n[k],rules,order,[...path,k]);if(f)return f;}
+  return order==='post'?here():null;}
+function run(ast,target,neg){
+  const steps=[];let cur=ast;
+  if(neg){cur=NOT(ast);steps.push({ph:'negate',rule:'assume ¬F and try to reach 0',before:ast,after:cur,path:[]});}
+  const phases=[['ite','pre'],['arrows','pre'],['nnf','pre'],['simplify','post']];
+  if(target!=='nnf')phases.push([target,'pre'],['simplify','post']);
+  let g=0;
+  for(const [ph,order] of phases)for(;;){const f=find(cur,R[ph],order);if(!f)break;
+    const nxt=set(cur,f.path,f.x[0]);steps.push({ph,rule:f.x[1],before:cur,after:nxt,path:f.path});cur=nxt;
+    if(++g>400)return{steps,result:cur};}
+  return{steps,result:cur};}
+
+// ---- Printing (every node is a hoverable span) ----
+const PREC={iff:1,imp:2,or:3,and:4,not:5,var:6,const:6,ite:0};
+const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;');
+const same=(a,b)=>a&&a.length===b.length&&a.every((k,i)=>k===b[i]);
+function show(n,mark,path=[]){
+  const cls='t'+(same(mark&&mark.path,path)?' '+mark.cls:'');
+  const sub=(k,minp)=>{const c=n[k];const r=show(c,mark,[...path,k]);return PREC[c.t]<minp?'<span class="k">(</span>'+r+'<span class="k">)</span>':r;};
+  const op=(c,s)=>`<span class="op ${c}">${s}</span>`;
+  let s;
+  switch(n.t){
+    case'var':s=`<span class="v" data-v="${esc(n.n)}">${esc(n.n)}</span>`;break;
+    case'const':s=`<span class="k">${n.v}</span>`;break;
+    case'not':s=op('not','¬')+sub('a',PREC.not);break;
+    case'and':s=sub('a',PREC.and)+op('and',' ∧ ')+sub('b',PREC.and+1);break;
+    case'or':s=sub('a',n.a.t==='or'?PREC.or:PREC.and+1)+op('or',' ∨ ')+sub('b',PREC.and+1);break;
+    case'imp':s=sub('a',PREC.imp+1)+op('imp',' → ')+sub('b',PREC.imp);break;
+    case'iff':s=sub('a',PREC.iff+1)+op('iff',' ↔ ')+sub('b',PREC.iff+1);break;
+    case'ite':s=op('ite','if ')+show(n.c,mark,[...path,'c'])+op('ite',' then ')+show(n.a,mark,[...path,'a'])+op('ite',' else ')+show(n.b,mark,[...path,'b']);}
+  return `<span class="${cls}" data-p="${path.join('.')}">${s}</span>`;}
+
+// ---- Truth table ----
+const vars=(n,s=new Set())=>{if(n.t==='var')s.add(n.n);kids(n).forEach(k=>vars(n[k],s));return s;};
+const ev=(n,e)=>({var:()=>e[n.n],const:()=>n.v,not:()=>1-ev(n.a,e),and:()=>ev(n.a,e)&ev(n.b,e),or:()=>ev(n.a,e)|ev(n.b,e),
+  imp:()=>(1-ev(n.a,e))|ev(n.b,e),iff:()=>+(ev(n.a,e)===ev(n.b,e)),ite:()=>ev(n.c,e)?ev(n.a,e):ev(n.b,e)})[n.t]();
+
+
+
+// ================= VISUALS =================
+const $=id=>document.getElementById(id);
+const OPSYM={and:'∧',or:'∨',not:'¬',imp:'→',iff:'↔',ite:'if'};
+const startsWith=(p,q)=>q&&p.length>=q.length&&q.every((k,i)=>k===p[i]);
+const plain=n=>show(n).replace(/<[^>]+>/g,'').replace(/&amp;/g,'&').replace(/&lt;/g,'<');
+const ease=t=>t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;
+
+// ---- tidy layout: leaves get consecutive x, parents centre over children ----
+function layout(ast){
+  const nodes=[],edges=[];let x=0;
+  (function go(n,path,depth){const me={n,path,depth,key:plain(n)};const ch=kids(n);
+    if(!ch.length)me.x=x++;else{const cs=ch.map(k=>go(n[k],[...path,k],depth+1));me.x=(cs[0].x+cs[cs.length-1].x)/2;cs.forEach(c=>edges.push([me,c]));}
+    nodes.push(me);return me;})(ast,[],0);
+  const w=x,d=Math.max(...nodes.map(n=>n.depth));
+  nodes.forEach(n=>n.x-= (w-1)/2);      // centre on 0
+  return{nodes,edges,w,d};}
+
+// ---- tokens of a formula (for the strata view) ----
+const PR={iff:1,imp:2,or:3,and:4,not:5,var:6,const:6,ite:0};
+function tokens(n,path=[],out=[]){
+  const push=(s,cls)=>out.push({s,cls,path});
+  const sub=(k,minp)=>{const c=n[k];const par=PR[c.t]<minp;if(par)push('(','k');tokens(c,[...path,k],out);if(par)push(')','k');};
+  switch(n.t){
+    case'var':push(n.n,'var');break;case'const':push(String(n.v),'const');break;
+    case'not':push('¬','not');sub('a',PR.not);break;
+    case'and':sub('a',PR.and);push('∧','and');sub('b',PR.and+1);break;
+    case'or':sub('a',n.a.t==='or'?PR.or:PR.and+1);push('∨','or');sub('b',PR.and+1);break;
+    case'imp':sub('a',PR.imp+1);push('→','imp');sub('b',PR.imp);break;
+    case'iff':sub('a',PR.iff+1);push('↔','iff');sub('b',PR.iff+1);break;
+    case'ite':push('if','ite');tokens(n.c,[...path,'c'],out);push('then','ite');tokens(n.a,[...path,'a'],out);push('else','ite');tokens(n.b,[...path,'b'],out);}
+  return out;}
+
+// ================= STATE =================
+let LINES=[],LAY=[],FRAME={w:1,d:1},cur=0,playing=false,anim=null;
+let target='dnf',neg=false;
+
+function compute(){
+  const src=$('src').value.trim();$('err').textContent='';
+  if(!src){LINES=[];draw();return;}
+  let ast;try{ast=parse(src);}catch(e){$('err').textContent=e.message;return;}
+  const r=run(ast,target,neg);
+  LINES=[{f:ast,why:'input',ph:null}];r.steps.forEach(s=>LINES.push({f:s.after,why:s.rule,ph:s.ph,path:s.path}));
+  LAY=LINES.map(l=>layout(l.f));
+  FRAME={w:Math.max(...LAY.map(l=>l.w)),d:Math.max(...LAY.map(l=>l.d))};
+  cur=0;stop();buildStrata();buildScrub();buildTable();draw();
+  // auto-play once
+  setTimeout(()=>play(),400);
+}
+
+// ================= STAGE (morphing tree) =================
+const DX=34,DY=46,NR=12,PAD=24;
+function stageBox(){const W=Math.max(1,FRAME.w)*DX+2*PAD,H=(FRAME.d+1)*DY+2*PAD;return{W,H};}
+const px=x=>stageBox().W/2+x*DX, py=d=>PAD+NR+d*DY;
+
+// match nodes of step i-1 (before) and step i (after): outside the redex by path, inside by structural key (reused pieces slide)
+function matching(i){
+  const A=LAY[i-1].nodes,B=LAY[i].nodes,path=LINES[i].path;const m=new Map();
+  const byPath=new Map(A.map(n=>[n.path.join('.'),n]));
+  const inside=A.filter(n=>startsWith(n.path,path));const pool=new Map();inside.forEach(n=>{if(!pool.has(n.key))pool.set(n.key,[]);pool.get(n.key).push(n);});
+  B.forEach(b=>{if(!startsWith(b.path,path)){m.set(b,byPath.get(b.path.join('.'))||null);return;}
+    const c=pool.get(b.key);if(c&&c.length&&b.path.length>path.length){m.set(b,c.shift());}else m.set(b,null);});
+  return m;}
+
+function drawTree(i,t){ // t in [0,1]: 0 = previous layout, 1 = layout i
+  const {W,H}=stageBox();const L=LAY[i];const path=LINES[i].path;
+  let s=`<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">`;
+  const pos=new Map();
+  if(t>=1||i===0||!LINES[i].path){L.nodes.forEach(n=>pos.set(n,{x:px(n.x),y:py(n.depth),o:1,r:1}));}
+  else{
+    const M=matching(i);const red=LAY[i-1].nodes.find(n=>n.path.join('.')===path.join('.'));const rx=px(red.x),ry=py(red.depth);
+    L.nodes.forEach(n=>{const a=M.get(n);const X=px(n.x),Y=py(n.depth);
+      if(a)pos.set(n,{x:px(a.x)+(X-px(a.x))*t,y:py(a.depth)+(Y-py(a.depth))*t,o:1,r:1});   // survives: slide
+      else pos.set(n,{x:rx+(X-rx)*t,y:ry+(Y-ry)*t,o:Math.min(1,t*1.5),r:.3+.7*t});});      // born: grow out of the redex
+    // vanishing nodes of the old redex, not reused: shrink into the redex point
+    const used=new Set([...M.values()].filter(Boolean));
+    LAY[i-1].nodes.filter(n=>startsWith(n.path,path)&&!used.has(n)).forEach(n=>{
+      s+=`<g class="tn ${n.n.t} ghost" style="opacity:${1-t}"><circle cx="${px(n.x)+(rx-px(n.x))*t}" cy="${py(n.depth)+(ry-py(n.depth))*t}" r="${NR*(1-t*.7)}"/></g>`;});
+  }
+  // blob around the contractum
+  if(i&&LINES[i].path){const sub=L.nodes.filter(n=>startsWith(n.path,path));const xs=sub.map(n=>pos.get(n).x),ys=sub.map(n=>pos.get(n).y);
+    s+=`<rect class="blob" style="opacity:${.85*Math.min(1,t*2)}" x="${Math.min(...xs)-NR-6}" y="${Math.min(...ys)-NR-6}" width="${Math.max(...xs)-Math.min(...xs)+2*NR+12}" height="${Math.max(...ys)-Math.min(...ys)+2*NR+12}" rx="16"/>`;}
+  L.edges.forEach(([a,b])=>{const A=pos.get(a),B=pos.get(b);const m=(A.y+B.y)/2;
+    s+=`<path class="te" style="opacity:${.6*Math.min(A.o,B.o)}" d="M${A.x},${A.y} C${A.x},${m} ${B.x},${m} ${B.x},${B.y}"/>`;});
+  L.nodes.forEach(n=>{const P=pos.get(n);const lit=n.n.t==='var'||n.n.t==='const';const lab=lit?(n.n.t==='var'?n.n.n:String(n.n.v)):OPSYM[n.n.t];
+    s+=`<g class="tn ${n.n.t}" style="opacity:${P.o}" transform="translate(${P.x},${P.y}) scale(${P.r})"><circle r="${NR}"/><text class="${lit?'lit':''}">${esc(lab)}</text></g>`;});
+  $('stage').innerHTML=s+'</svg>';
+}
+function drawFormula(i){const l=LINES[i];$('formula').innerHTML=show(l.f,l.path?{path:l.path,cls:'contractum'}:null);
+  $('why').innerHTML=i?`<i style="--c:${PHCOL[l.ph]}"></i><b>${l.ph}</b> ${esc(l.why)}`:'<b>input</b> press play, or scrub';
+  $('stepno').textContent=`${i} / ${LINES.length-1}`;}
+function draw(t=1){if(!LINES.length){$('stage').innerHTML='';return;}drawTree(cur,t);drawFormula(cur);markStrata();$('scrub').value=cur;}
+
+// ---- animation ----
+function goto(i,animate=true){i=Math.max(0,Math.min(LINES.length-1,i));if(anim)cancelAnimationFrame(anim);
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if(!animate||reduce||i!==cur+1){cur=i;draw(1);return;}
+  cur=i;const t0=performance.now(),D=520;
+  const f=now=>{const t=Math.min(1,(now-t0)/D);draw(ease(t));if(t<1)anim=requestAnimationFrame(f);else{anim=null;if(playing)setTimeout(()=>{if(playing)(cur<LINES.length-1?goto(cur+1):stop());},260);}};
+  anim=requestAnimationFrame(f);}
+function play(){if(!LINES.length)return;if(cur>=LINES.length-1)cur=0;playing=true;$('play').textContent='❚❚';goto(cur+1);}
+function stop(){playing=false;$('play').textContent='▶';}
+
+// ================= STRATA (formula as coloured strips, one row per step) =================
+function buildStrata(){
+  const maxLen=Math.max(...LINES.map(l=>tokens(l.f).length));
+  const rows=LINES.map((l,i)=>{const tk=tokens(l.f);const cells=tk.map(t=>{const inC=l.path&&startsWith(t.path,l.path);return `<i class="${t.cls}${inC?' c':''}" style="flex:${t.s.length>1?1.6:1}"></i>`;}).join('');
+    return `<div class="srow" data-i="${i}" style="width:${(tk.length/maxLen*100).toFixed(1)}%">${cells}</div>`;});
+  $('strata').innerHTML=rows.join('');
+  $('strata').querySelectorAll('.srow').forEach(r=>{r.addEventListener('mouseenter',()=>{stop();goto(+r.dataset.i,false);});r.addEventListener('click',()=>{stop();goto(+r.dataset.i,false);});});}
+function markStrata(){$('strata').querySelectorAll('.srow').forEach(r=>r.classList.toggle('on',+r.dataset.i===cur));}
+
+// ---- scrub bar with phase colours ----
+function buildScrub(){const s=$('scrub');s.max=LINES.length-1;s.value=0;
+  const segs=LINES.slice(1).map(l=>PHCOL[l.ph]);const n=segs.length||1;
+  $('scrubbg').style.background=`linear-gradient(to right,${segs.map((c,i)=>`${c} ${i/n*100}% ${(i+1)/n*100}%`).join(',')||'var(--chip)'})`;}
+
+// ================= TRUTH TABLE =================
+function buildTable(){
+  const F=neg?NOT(LINES[0].f):LINES[0].f,vs=[...vars(F)].sort();let rows='',T=true,Fa=true;
+  for(let m=0;m<(1<<vs.length);m++){const e={};vs.forEach((v,i)=>e[v]=(m>>(vs.length-1-i))&1);const val=ev(F,e);if(!val)T=false;if(val)Fa=false;
+    rows+='<tr>'+vs.map(v=>`<td class="${e[v]?'one':'zero'}">${e[v]}</td>`).join('')+`<td class="${val?'one':'zero'}"><b>${val}</b></td></tr>`;}
+  const v=T?['ok','valid','true for every assignment'+(neg?' — so the original is unsatisfiable':'')]:Fa?['bad','unsatisfiable',neg?'¬F never holds, so F is a tautology':'never true']:['','satisfiable','true for some assignments, false for others'];
+  $('tt').innerHTML=`<table><tr>${vs.map(x=>`<th>${esc(x)}</th>`).join('')}<th>${neg?'¬F':'F'}</th></tr>${rows}</table>`;
+  $('verdict').className='verdict '+v[0];$('verdict').innerHTML=`${neg?'¬F is ':'F is '}${v[1]}<small>${v[2]}</small>`;}
+
+// ================= WIRING =================
+$('run').onclick=compute;$('src').addEventListener('keydown',e=>{if(e.key==='Enter')compute();});
+document.querySelectorAll('[data-target]').forEach(b=>b.onclick=()=>{target=b.dataset.target;document.querySelectorAll('[data-target]').forEach(x=>x.classList.toggle('on',x===b));compute();});
+$('neg').onclick=()=>{neg=!neg;$('neg').classList.toggle('on',neg);compute();};
+document.querySelectorAll('.ex').forEach(b=>b.onclick=()=>{$('src').value=b.dataset.src;neg=!!b.dataset.neg;$('neg').classList.toggle('on',neg);
+  target=b.dataset.target||'dnf';document.querySelectorAll('[data-target]').forEach(x=>x.classList.toggle('on',x.dataset.target===target));compute();});
+$('play').onclick=()=>playing?stop():play();
+$('prev').onclick=()=>{stop();goto(cur-1,false);};$('next').onclick=()=>{stop();goto(cur+1);};
+$('scrub').addEventListener('input',()=>{stop();goto(+$('scrub').value,false);});
+document.addEventListener('keydown',e=>{if(e.target.tagName==='INPUT'&&e.target.id==='src')return;
+  if(e.key==='ArrowRight'){stop();goto(cur+1);}else if(e.key==='ArrowLeft'){stop();goto(cur-1,false);}else if(e.key===' '){e.preventDefault();playing?stop():play();}});
+$('formula').addEventListener('mouseover',e=>{const t=e.target.closest('.t');document.querySelectorAll('#formula .t.hov').forEach(x=>x.classList.remove('hov'));if(t)t.classList.add('hov');});
+$('formula').addEventListener('mouseleave',()=>document.querySelectorAll('#formula .t.hov').forEach(x=>x.classList.remove('hov')));
+$('src').value='if a || b then (if b && !a then b && c else !b && c) else c';compute();
+
+</script>
+
+</body>
+</html>

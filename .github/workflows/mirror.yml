@@ -1,0 +1,107 @@
+name: mirror
+# Every top-level folder with an index.html becomes https://<folder>.anatole.wiki:
+# the folder is pushed (as a fresh orphan commit) to repo a2br/<folder>, and that repo's
+# GitHub Pages is pointed at the subdomain. This repo itself is published as labs.anatole.wiki
+# with an auto-generated index. Needs secret LABS_PAT (classic token, scope: repo).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      all:
+        description: "re-mirror every folder, not just the changed ones"
+        type: boolean
+        default: true
+
+concurrency: mirror
+
+env:
+  OWNER: a2br
+  DOMAIN: anatole.wiki
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    outputs:
+      names: ${{ steps.pick.outputs.names }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+
+      - name: pick folders
+        id: pick
+        run: |
+          all_dirs=$(for d in */; do d=${d%/}; [ -f "$d/index.html" ] && echo "$d"; done)
+          before='${{ github.event.before }}'
+          if [ '${{ github.event_name }}' = workflow_dispatch ] || [ -z "$before" ] || [ "$before" = 0000000000000000000000000000000000000000 ] || ! git cat-file -e "$before" 2>/dev/null; then
+            dirs="$all_dirs"
+          else
+            changed=$(git diff --name-only "$before" "$GITHUB_SHA" | awk -F/ 'NF>1 && $1 !~ /^\./ {print $1}' | sort -u)
+            dirs=$(for d in $changed; do [ -f "$d/index.html" ] && echo "$d"; done)
+            for d in $changed; do [ -d "$d" ] || echo "::warning::folder '$d' was removed; repo $OWNER/$d and $d.$DOMAIN are left as-is — archive them by hand if wanted"; done
+          fi
+          echo "mirroring: $dirs"
+          echo "names=$(echo $dirs)" >> "$GITHUB_OUTPUT"
+          echo "all=$(echo $all_dirs)" >> "$GITHUB_OUTPUT"
+
+      - name: mirror folders to their repos
+        if: steps.pick.outputs.names != ''
+        env:
+          GH_TOKEN: ${{ secrets.LABS_PAT }}
+        run: |
+          set -e
+          [ -n "$GH_TOKEN" ] || { echo "::error::secret LABS_PAT is missing"; exit 1; }
+          for d in ${{ steps.pick.outputs.names }}; do
+            [[ "$d" =~ ^[a-z0-9-]+$ ]] || { echo "::error::'$d' is not a valid subdomain name (lowercase, digits, dashes)"; exit 1; }
+            host="$d.$DOMAIN"; repo="$OWNER/$d"
+            gh repo view "$repo" >/dev/null 2>&1 || gh repo create "$repo" --public -d "mirror of labs/$d → https://$host" >/dev/null
+            tmp=$(mktemp -d); cp -R "$d/." "$tmp/"; echo "$host" > "$tmp/CNAME"; : > "$tmp/.nojekyll"
+            g="git -C $tmp -c user.name=labs-mirror -c user.email=labs@$DOMAIN"
+            $g init -q -b main; $g add -A; $g commit -qm "mirror of labs/$d @ ${GITHUB_SHA::7}"
+            $g push -qf "https://x-access-token:${GH_TOKEN}@github.com/$repo.git" main
+            gh api -X POST "repos/$repo/pages" -f build_type=legacy -f 'source[branch]=main' -f 'source[path]=/' >/dev/null 2>&1 || true
+            gh api -X PUT  "repos/$repo/pages" -f cname="$host" >/dev/null 2>&1 || true
+            gh api -X PUT  "repos/$repo/pages" -F https_enforced=true >/dev/null 2>&1 || true
+            echo "✓ https://$host  ($repo)"
+          done
+
+      - name: make sure this repo is published as labs.${{ env.DOMAIN }}
+        env:
+          GH_TOKEN: ${{ secrets.LABS_PAT }}
+        run: |
+          repo="$OWNER/labs"
+          gh api -X POST "repos/$repo/pages" -f build_type=workflow >/dev/null 2>&1 || gh api -X PUT "repos/$repo/pages" -f build_type=workflow >/dev/null 2>&1 || true
+          gh api -X PUT "repos/$repo/pages" -f cname="labs.$DOMAIN" >/dev/null 2>&1 || true
+          gh api -X PUT "repos/$repo/pages" -F https_enforced=true >/dev/null 2>&1 || true
+
+      - name: build directory page
+        run: |
+          mkdir -p _site
+          python3 - <<'EOF'
+          import json, os, html, datetime
+          desc = json.load(open('labs.json')) if os.path.exists('labs.json') else {}
+          names = sorted(d for d in os.listdir('.') if os.path.isdir(d) and not d.startswith(('.', '_')) and os.path.exists(f'{d}/index.html'))
+          rows = ''.join(f'<li><a href="https://{n}.anatole.wiki/">{n}</a><span>{html.escape(desc.get(n, ""))}</span></li>' for n in names)
+          open('_site/index.html', 'w').write(f'''<!doctype html><html lang="en"><head><meta charset="utf-8">
+          <meta name="viewport" content="width=device-width,initial-scale=1"><title>labs · anatole.wiki</title>
+          <style>:root{{color-scheme:light dark}}body{{margin:0;padding:48px 16px;font:17px/1.5 system-ui,sans-serif;max-width:640px;margin-inline:auto}}
+          h1{{font-size:1.6rem;margin:0 0 4px}}p{{color:#777;margin:0 0 28px}}ul{{list-style:none;padding:0;margin:0}}
+          li{{display:flex;gap:16px;align-items:baseline;padding:10px 0;border-top:1px solid #8884}}a{{font-weight:600;color:#2e86de;text-decoration:none;min-width:9em}}
+          a:hover{{text-decoration:underline}}span{{color:#777}}</style></head><body>
+          <h1>labs</h1><p>small things, each on its own subdomain · {len(names)} so far</p><ul>{rows}</ul>
+          <p style="margin-top:32px;font-size:13px">built {datetime.date.today()} from <a href="https://github.com/a2br/labs" style="min-width:0">a2br/labs</a></p></body></html>''')
+          EOF
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: _site }
+
+  deploy-directory:
+    needs: mirror
+    runs-on: ubuntu-latest
+    permissions: { pages: write, id-token: write }
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

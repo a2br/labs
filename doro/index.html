@@ -4,8 +4,24 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>doro — work / rest timer</title>
-<meta name="description" content="doro: a calm work / rest timer with a timeline of your day and a small pixel tomato.">
+<meta name="description" content="A calm work / rest timer with a timeline of your day and a small pixel tomato.">
 <meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#F4E8D8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#241A15" media="(prefers-color-scheme: dark)">
+<link rel="canonical" href="https://doro.anatole.wiki/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="doro">
+<meta property="og:title" content="doro — work / rest timer">
+<meta property="og:description" content="A calm work / rest timer with a timeline of your day and a small pixel tomato.">
+<meta property="og:url" content="https://doro.anatole.wiki/">
+<meta property="og:image" content="https://doro.anatole.wiki/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="doro: a 25:00 work timer beside a pixel tomato">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="doro — work / rest timer">
+<meta name="twitter:description" content="A calm work / rest timer with a timeline of your day and a small pixel tomato.">
+<meta name="twitter:image" content="https://doro.anatole.wiki/og.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=Instrument+Sans:wght@500;600&display=swap">
 <style>
@@ -213,6 +229,9 @@ body{ margin:0; background:var(--ground); color:var(--ink); font-family:'Instrum
   const fresh = () => !S.running && S.remaining === total();
   const inProgress = () => S.running || S.remaining !== total();
   const pendingSwitch = () => S.sel !== S.mode && inProgress();
+  const editMode = () => pendingSwitch() ? S.sel : S.mode;            // whose duration the selector edits
+  const canEdit = () => fresh() || pendingSwitch();
+  const shownMs = () => pendingSwitch() ? S.durations[S.sel] * MIN : S.remaining; // what the big clock shows
   const other = m => m === 'work' ? 'rest' : 'work';
   function armBell(c){ cancelPending(); if (!c) return; bellAt = c.currentTime + S.remaining/1000; pending = (S.mode === 'work' ? bell : chime)(c, bellAt); }
   function cancelPending(){ if (!pending) return; pending.nodes.forEach(n => { try{ n.stop(0); }catch(e){} }); try{ pending.gain.disconnect(); }catch(e){} pending = null; }
@@ -255,10 +274,13 @@ body{ margin:0; background:var(--ground); color:var(--ink); font-family:'Instrum
   function toggle(){ S.running ? stop() : start(); }
   function setMinutes(n){
     n = Math.max(1, Math.min(60, Math.round(n)));
-    if (!fresh() || n === S.durations[S.mode]) return;
-    S.durations[S.mode] = n; S.remaining = n*MIN; S.finished = null;
+    const m = editMode();
+    if (!canEdit() || n === S.durations[m]) return;
+    S.durations[m] = n;
+    if (!pendingSwitch()){ S.remaining = n*MIN; S.finished = null; }
     SFX.ratchet(); render(); save();
   }
+  const nudge = d => setMinutes(S.durations[editMode()] + d);
   function setMuted(m){ S.muted = m; if (master) master.gain.value = m ? 0 : VOL; muteBtn.classList.toggle('muted', m); muteBtn.setAttribute('aria-pressed', m); muteBtn.setAttribute('aria-label', m ? 'Sound off' : 'Sound on'); save(); }
   async function requestWake(){ try{ if ('wakeLock' in navigator && document.visibilityState === 'visible'){ wake = await navigator.wakeLock.request('screen'); } }catch(e){} }
   function releaseWake(){ try{ wake && wake.release(); }catch(e){} wake = null; }
@@ -270,12 +292,13 @@ body{ margin:0; background:var(--ground); color:var(--ink); font-family:'Instrum
   function fmt(ms){ const s = Math.ceil(ms/1000); return String(Math.floor(s/60)).padStart(2,'0') + ':' + String(s%60).padStart(2,'0'); }
   function render(){
     const rem = S.remaining, t = fmt(rem), isFresh = rem === total(), mins = S.durations[S.mode];
-    if (timeEl.textContent !== t) timeEl.textContent = t;
+    const shown = fmt(shownMs());
+    if (timeEl.textContent !== shown) timeEl.textContent = shown;
     document.body.dataset.mode = S.sel;
     modeWork.setAttribute('aria-pressed', S.sel === 'work'); modeRest.setAttribute('aria-pressed', S.sel === 'rest');
     const sw = pendingSwitch();
     let sub;
-    if (sw) sub = (S.running ? (S.mode === 'work' ? 'Working' : 'Resting') : 'Paused ' + S.mode) + ', ' + t + ' left. <b>Start ' + S.sel + '</b> to switch.';
+    if (sw) sub = '<b>' + S.sel + '</b> for ' + S.durations[S.sel] + (S.durations[S.sel] === 1 ? ' minute' : ' minutes') + '. ' + (S.running ? (S.mode === 'work' ? 'Work' : 'Rest') + ' still running, ' : S.mode + ' paused, ') + t + ' left.';
     else if (S.flow) sub = (S.flow === 'work' ? 'Still counting as work, <b>+' + fmt(Date.now() - S.flowSince) + '</b>. Rest when ready.' : 'Still resting, <b>+' + fmt(Date.now() - S.flowSince) + '</b>. Work when ready.');
     else if (S.finished) sub = S.finished === 'work' ? 'Work done. <b>Rest</b> for ' + mins + (mins === 1 ? ' minute?' : ' minutes?') : 'Rested. Back to <b>work</b> for ' + mins + (mins === 1 ? ' minute?' : ' minutes?');
     else if (S.running) sub = S.mode === 'work' ? '<b>Working.</b> Stay with it.' : '<b>Resting.</b> Look away from the screen.';
@@ -283,9 +306,9 @@ body{ margin:0; background:var(--ground); color:var(--ink); font-family:'Instrum
     else sub = '<b>' + S.mode + '</b> for ' + mins + (mins === 1 ? ' minute' : ' minutes');
     if (subEl.innerHTML !== sub) subEl.innerHTML = sub;
     startBtn.textContent = sw ? 'Start ' + S.sel : S.running ? 'Pause' : (!isFresh && rem > 0 ? 'Resume' : (S.finished ? 'Start ' + S.mode : 'Start'));
-    minus.disabled = plus.disabled = !fresh();
+    minus.disabled = plus.disabled = !canEdit();
     presetBtns.forEach(b => { b.setAttribute('aria-pressed', +b.dataset.w === S.durations.work && +b.dataset.r === S.durations.rest); b.disabled = S.running; });
-    canvas.classList.toggle('locked', !fresh());
+    canvas.classList.toggle('locked', !canEdit());
     if (!titleFlash) document.title = S.running || !isFresh ? `${t} \u00B7 ${S.mode}` : baseTitle;
     const now = Date.now();
     if (now - lastTL > 1000 || !S.running){ lastTL = now; renderDay(); }
@@ -379,17 +402,17 @@ body{ margin:0; background:var(--ground); color:var(--ink); font-family:'Instrum
   canvas.addEventListener('pointerenter', () => { hovering = true; });
   canvas.addEventListener('pointerleave', () => { hovering = false; tiltX = tiltY = 0; });
   canvas.addEventListener('pointermove', e => { if (!hovering) return; const r = canvas.getBoundingClientRect(); tiltY = ((e.clientX - r.left) / r.width - 0.5) * 0.9; tiltX = ((e.clientY - r.top) / r.height - 0.5) * 0.4; });
-  canvas.addEventListener('wheel', e => { e.preventDefault(); if (!fresh()) return; setMinutes(S.durations[S.mode] + (e.deltaY > 0 ? 1 : -1)); }, { passive:false });
-  timeEl.addEventListener('wheel', e => { e.preventDefault(); if (!fresh()) return; setMinutes(S.durations[S.mode] + (e.deltaY > 0 ? 1 : -1)); }, { passive:false });
+  canvas.addEventListener('wheel', e => { e.preventDefault(); if (!canEdit()) return; nudge(e.deltaY > 0 ? 1 : -1); }, { passive:false });
+  timeEl.addEventListener('wheel', e => { e.preventDefault(); if (!canEdit()) return; nudge(e.deltaY > 0 ? 1 : -1); }, { passive:false });
   canvas.addEventListener('pointerdown', e => { dragging = true; dragX = e.clientX; dragAcc = 0; try{ canvas.setPointerCapture(e.pointerId); }catch(err){} });
-  canvas.addEventListener('pointermove', e => { if (!dragging || !fresh()) return; dragAcc += e.clientX - dragX; dragX = e.clientX; const steps = Math.trunc(dragAcc/12); if (steps){ dragAcc -= steps*12; setMinutes(S.durations[S.mode] + steps); } });
+  canvas.addEventListener('pointermove', e => { if (!dragging || !canEdit()) return; dragAcc += e.clientX - dragX; dragX = e.clientX; const steps = Math.trunc(dragAcc/12); if (steps){ dragAcc -= steps*12; nudge(steps); } });
   ['pointerup','pointercancel'].forEach(ev => canvas.addEventListener(ev, () => { dragging = false; }));
   const clock = new THREE.Clock();
   function frame(){
     raf = requestAnimationFrame(frame);
     const dt = Math.min(0.05, clock.getDelta());
     if (S.running) tick();
-    const target = -(S.remaining/MIN)/60 * TAU;
+    const target = -(shownMs()/MIN)/60 * TAU;
     twist += (target - twist) * Math.min(1, dt*10); top.rotation.y = twist;
     rig.rotation.y += (tiltY - rig.rotation.y) * Math.min(1, dt*5); rig.rotation.x += (tiltX - rig.rotation.x) * Math.min(1, dt*5);
     renderer.render(scene, camera);
@@ -399,8 +422,8 @@ body{ margin:0; background:var(--ground); color:var(--ink); font-family:'Instrum
   startBtn.addEventListener('click', primary);
   $('#resetBtn').addEventListener('click', reset);
   $('#skipBtn').addEventListener('click', skip);
-  minus.addEventListener('click', () => setMinutes(S.durations[S.mode]-1));
-  plus.addEventListener('click', () => setMinutes(S.durations[S.mode]+1));
+  minus.addEventListener('click', () => nudge(-1));
+  plus.addEventListener('click', () => nudge(1));
   presetBtns.forEach(b => b.addEventListener('click', () => {
     const w = +b.dataset.w, r = +b.dataset.r; if (S.running || (w === S.durations.work && r === S.durations.rest)) return;
     S.durations.work = w; S.durations.rest = r; S.remaining = total(); S.finished = null; SFX.ratchet(); render(); save();
@@ -414,8 +437,8 @@ body{ margin:0; background:var(--ground); color:var(--ink); font-family:'Instrum
     else if (e.key === 'r' || e.key === 'R') reset();
     else if (e.key === 'n' || e.key === 'N') skip();
     else if (e.key === 'm' || e.key === 'M') setMuted(!S.muted);
-    else if (e.key === 'ArrowUp'){ e.preventDefault(); setMinutes(S.durations[S.mode]+1); }
-    else if (e.key === 'ArrowDown'){ e.preventDefault(); setMinutes(S.durations[S.mode]-1); }
+    else if (e.key === 'ArrowUp'){ e.preventDefault(); nudge(1); }
+    else if (e.key === 'ArrowDown'){ e.preventDefault(); nudge(-1); }
     else if (e.key === 'ArrowLeft'){ e.preventDefault(); if (S.sel !== 'work') selectMode('work'); }
     else if (e.key === 'ArrowRight'){ e.preventDefault(); if (S.sel !== 'rest') selectMode('rest'); }
   });
@@ -435,7 +458,7 @@ body{ margin:0; background:var(--ground); color:var(--ink); font-family:'Instrum
     if (hot && hot.S){ Object.assign(S, hot.S); if (S.running){ S.remaining = Math.max(0, S.endAt - Date.now()); S.running = false; } }
     if (S.remaining <= 0 || S.remaining > total()) S.remaining = total();
     if (!S.sel) S.sel = S.mode;
-    twist = -(S.remaining/MIN)/60 * TAU;
+    twist = -(shownMs()/MIN)/60 * TAU;
     setMuted(S.muted); render(); frame();
     if (hot && hot.S && hot.S.running && S.remaining > 0) start(true);
   }

@@ -220,7 +220,8 @@ body{ margin:0; background:var(--ground); color:var(--ink); font-family:'Instrum
     click(){ const c = ac(); if(!c) return; const t = c.currentTime; noise(c,t,2500,1.5,0.04,0.25); blip(c,t,520,300,0.07,0.15,'triangle'); },
     ratchet(){ const c = ac(); if(!c) return; const t = c.currentTime; noise(c,t,3800,3,0.025,0.4); blip(c,t,1900,1300,0.03,0.07,'square'); },
     start(){ const c = ac(); if(!c) return; const t = c.currentTime; blip(c,t,523,null,0.12,0.2,'triangle'); blip(c,t+0.12,784,null,0.2,0.2,'triangle'); },
-    pause(){ const c = ac(); if(!c) return; const t = c.currentTime; blip(c,t,784,null,0.1,0.18,'triangle'); blip(c,t+0.1,523,null,0.22,0.18,'triangle'); }
+    pause(){ const c = ac(); if(!c) return; const t = c.currentTime; blip(c,t,784,null,0.1,0.18,'triangle'); blip(c,t+0.1,523,null,0.22,0.18,'triangle'); },
+    boop(){ const c = ac(); if(!c) return; const t = c.currentTime; blip(c,t,330,660,0.12,0.16,'triangle'); blip(c,t+0.09,880,1100,0.1,0.08,'sine'); }
   };
 
   // ---------- timer ----------
@@ -397,16 +398,18 @@ body{ margin:0; background:var(--ground); color:var(--ink); font-family:'Instrum
   for (let i=0;i<5;i++){ const leaf = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.05, 0.2), matGreen); const a = i/5*TAU + 0.4; leaf.position.set(Math.cos(a)*0.28, 0.86, Math.sin(a)*0.28); leaf.rotation.y = -a; leaf.rotation.z = 0.22; top.add(leaf); }
   const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.95, 16), new THREE.MeshBasicMaterial({ color:0x2c221b, transparent:true, opacity:0.1 })); shadow.rotation.x = -Math.PI/2; shadow.position.y = -0.8; rig.add(shadow);
 
-  let tiltX = 0, tiltY = 0, twist = 0, dragging = false, dragX = 0, dragAcc = 0, hovering = false;
+  let tiltX = 0, tiltY = 0, twist = 0, dragging = false, dragX = 0, dragAcc = 0, hovering = false, moved = 0, tapAt = -1e9;
+  const TAP_MS = 650;
   window.addEventListener('resize', () => renderDay());
   canvas.addEventListener('pointerenter', () => { hovering = true; });
   canvas.addEventListener('pointerleave', () => { hovering = false; tiltX = tiltY = 0; });
   canvas.addEventListener('pointermove', e => { if (!hovering) return; const r = canvas.getBoundingClientRect(); tiltY = ((e.clientX - r.left) / r.width - 0.5) * 0.9; tiltX = ((e.clientY - r.top) / r.height - 0.5) * 0.4; });
   canvas.addEventListener('wheel', e => { e.preventDefault(); if (!canEdit()) return; nudge(e.deltaY > 0 ? 1 : -1); }, { passive:false });
   timeEl.addEventListener('wheel', e => { e.preventDefault(); if (!canEdit()) return; nudge(e.deltaY > 0 ? 1 : -1); }, { passive:false });
-  canvas.addEventListener('pointerdown', e => { dragging = true; dragX = e.clientX; dragAcc = 0; try{ canvas.setPointerCapture(e.pointerId); }catch(err){} });
-  canvas.addEventListener('pointermove', e => { if (!dragging || !canEdit()) return; dragAcc += e.clientX - dragX; dragX = e.clientX; const steps = Math.trunc(dragAcc/12); if (steps){ dragAcc -= steps*12; nudge(steps); } });
-  ['pointerup','pointercancel'].forEach(ev => canvas.addEventListener(ev, () => { dragging = false; }));
+  canvas.addEventListener('pointerdown', e => { dragging = true; dragX = e.clientX; dragAcc = 0; moved = 0; try{ canvas.setPointerCapture(e.pointerId); }catch(err){} });
+  canvas.addEventListener('pointermove', e => { if (!dragging) return; moved += Math.abs(e.clientX - dragX); if (!canEdit()){ dragX = e.clientX; return; } dragAcc += e.clientX - dragX; dragX = e.clientX; const steps = Math.trunc(dragAcc/12); if (steps){ dragAcc -= steps*12; nudge(steps); } });
+  canvas.addEventListener('pointerup', () => { if (dragging && moved < 6){ tapAt = performance.now(); SFX.boop(); } dragging = false; });
+  canvas.addEventListener('pointercancel', () => { dragging = false; });
   const clock = new THREE.Clock();
   function frame(){
     raf = requestAnimationFrame(frame);
@@ -415,6 +418,13 @@ body{ margin:0; background:var(--ground); color:var(--ink); font-family:'Instrum
     const target = -(shownMs()/MIN)/60 * TAU;
     twist += (target - twist) * Math.min(1, dt*10); top.rotation.y = twist;
     rig.rotation.y += (tiltY - rig.rotation.y) * Math.min(1, dt*5); rig.rotation.x += (tiltX - rig.rotation.x) * Math.min(1, dt*5);
+    const k = (performance.now() - tapAt) / TAP_MS;
+    if (k < 1){
+      const ease = 1 - k, sq = Math.sin(k*Math.PI*2) * 0.22 * ease;            // squash then stretch
+      timer.scale.set(1 - sq, 1 + sq, 1 - sq);
+      timer.position.y = Math.max(0, Math.sin(k*Math.PI)) * 0.45 * ease;       // one hop
+      timer.rotation.z = Math.sin(k*Math.PI*3) * 0.18 * ease;                  // wobble that settles
+    } else if (timer.position.y !== 0 || timer.rotation.z !== 0 || timer.scale.x !== 1){ timer.scale.set(1,1,1); timer.position.y = 0; timer.rotation.z = 0; }
     renderer.render(scene, camera);
   }
 
@@ -449,7 +459,7 @@ body{ margin:0; background:var(--ground); color:var(--ink); font-family:'Instrum
     else if (Date.now() - lastTL > 60000) renderDay();
   }, 500);
   function teardown(){ if (S.running) closeSegment(false); endFlow(); S.running = false; clearInterval(backupTimer); clearInterval(titleFlash); cancelAnimationFrame(raf); cancelPending(); releaseWake(); if (ctx){ try{ ctx.close(); }catch(e){} ctx = null; master = null; } try{ renderer.dispose(); }catch(e){} }
-  window.__ripen = { teardown, segments: () => SEG.slice(), S };
+  window.__ripen = { teardown, segments: () => SEG.slice(), S, lastTap: () => tapAt, pose: () => ({ y:timer.position.y, sx:timer.scale.x, rz:timer.rotation.z }) };
   window.addEventListener('pagehide', teardown);
 
   // ---------- boot ----------

@@ -81,7 +81,7 @@ body{ margin:0; background:var(--ground); color:var(--ink); font-family:'Instrum
 .link:hover{ color:var(--ink); background:var(--surface); }
 .link:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
 .side{ display:flex; flex-direction:column; align-items:center; gap:6px; }
-#c{ width:210px; height:210px; display:block; image-rendering:pixelated; image-rendering:crisp-edges; touch-action:pan-y; cursor:grab; }
+#c{ width:264px; height:264px; display:block; image-rendering:pixelated; image-rendering:crisp-edges; touch-action:pan-y; cursor:grab; }
 #c.locked{ cursor:default; }
 
 .day{ display:flex; flex-direction:column; gap:12px; border-top:1.5px solid var(--line); padding-top:22px; }
@@ -147,7 +147,7 @@ body{ margin:0; background:var(--ground); color:var(--ink); font-family:'Instrum
       </div>
     </div>
     <div class="side">
-      <canvas id="c" width="84" height="84" aria-hidden="true"></canvas>
+      <canvas id="c" width="106" height="106" aria-hidden="true"></canvas>
     </div>
   </section>
 
@@ -360,9 +360,9 @@ body{ margin:0; background:var(--ground); color:var(--ink); font-family:'Instrum
 
   // ---------- the small 3D tomato on the side ----------
   const renderer = new THREE.WebGLRenderer({ canvas, antialias:false, alpha:true, powerPreference:'low-power' });
-  renderer.setPixelRatio(1); renderer.setSize(84, 84, false); renderer.setClearColor(0x000000, 0);
+  renderer.setPixelRatio(1); renderer.setSize(106, 106, false); renderer.setClearColor(0x000000, 0);
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 50); camera.position.set(0, 1.7, 5.6); camera.lookAt(0, 0.05, 0);
+  const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 50); camera.position.set(0, 2.0, 7.0); camera.lookAt(0, 0.45, 0);
   const gd = new Uint8Array([90, 160, 225, 255]); const G = new THREE.DataTexture(gd, 4, 1, THREE.LuminanceFormat); G.minFilter = G.magFilter = THREE.NearestFilter; G.needsUpdate = true;
   const toon = hex => new THREE.MeshToonMaterial({ color:hex, gradientMap:G });
   const matRed = toon(0xd9532f), matGreen = toon(0x6b9a5b), flat = new THREE.MeshBasicMaterial({ color:0x2c221b });
@@ -399,16 +399,19 @@ body{ margin:0; background:var(--ground); color:var(--ink); font-family:'Instrum
   const band = new THREE.Mesh(new THREE.CylinderGeometry(1.06, 1.06, 0.26, 48, 1, true), new THREE.MeshBasicMaterial({ map:bandTex })); band.position.y = -0.04; top.add(band);
   const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.1, 0.4, 6), matGreen); stem.position.set(0.02, 0.98, 0); stem.rotation.z = -0.15; top.add(stem);
   for (let i=0;i<5;i++){ const leaf = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.05, 0.2), matGreen); const a = i/5*TAU + 0.4; leaf.position.set(Math.cos(a)*0.28, 0.86, Math.sin(a)*0.28); leaf.rotation.y = -a; leaf.rotation.z = 0.22; top.add(leaf); }
+  // tap animation: the stack pulls apart in layers (base, band, dome, stem) and drops back bottom-up
+  // lifts are absolute; band/stem live inside the top group, so their local lift is relative to the dome's
   const parts = [];
-  const reg = (o, layer, big) => parts.push({ o, layer, big, p:o.position.clone(), r:o.rotation.clone(), j:{x:0,y:0,z:0,rx:0,rz:0} });
-  reg(bot, 0, 1); reg(ptr, 0, 0.5); reg(mouth, 0, 0.4); reg(band, 1, 1); reg(top, 2, 1); reg(stem, 3, 0.8);
-  timer.children.filter(o => o.geometry === eyeGeo).forEach(e => reg(e, 0, 0.4));
-  top.children.filter(o => o.material === matGreen && o !== stem).forEach(l => reg(l, 3, 0.9));
-  function scatter(){ for (const P of parts){ const b = P.big, R = () => Math.random() - 0.5; P.j = { x:R()*0.5*b, y:(0.12 + Math.random()*0.4)*b + P.layer*0.06, z:R()*0.3*b, rx:R()*1.1*b, rz:R()*1.1*b }; } }
+  const reg = (o, layer, lift) => parts.push({ o, layer, lift, y0:o.position.y });
+  [bot, ptr, mouth, ...timer.children.filter(o => o.geometry === eyeGeo)].forEach(o => reg(o, 0, 0.04));
+  reg(band, 1, 0.16 - 0.3);
+  reg(top, 2, 0.3);
+  [stem, ...top.children.filter(o => o.material === matGreen && o !== stem)].forEach(o => reg(o, 3, 0.48 - 0.3));
+  let yaw = 0;
   const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.95, 16), new THREE.MeshBasicMaterial({ color:0x2c221b, transparent:true, opacity:0.1 })); shadow.rotation.x = -Math.PI/2; shadow.position.y = -0.8; rig.add(shadow);
 
   let tiltX = 0, tiltY = 0, twist = 0, dragging = false, dragX = 0, dragAcc = 0, hovering = false, moved = 0, tapAt = -1e9;
-  const TAP_MS = 420; let tapping = false;
+  const TAP_MS = 520; let tapping = false;
   window.addEventListener('resize', () => renderDay());
   canvas.addEventListener('pointerenter', () => { hovering = true; });
   canvas.addEventListener('pointerleave', () => { hovering = false; tiltX = tiltY = 0; });
@@ -417,7 +420,7 @@ body{ margin:0; background:var(--ground); color:var(--ink); font-family:'Instrum
   timeEl.addEventListener('wheel', e => { e.preventDefault(); if (!canEdit()) return; nudge(e.deltaY > 0 ? 1 : -1); }, { passive:false });
   canvas.addEventListener('pointerdown', e => { dragging = true; dragX = e.clientX; dragAcc = 0; moved = 0; try{ canvas.setPointerCapture(e.pointerId); }catch(err){} });
   canvas.addEventListener('pointermove', e => { if (!dragging) return; moved += Math.abs(e.clientX - dragX); if (!canEdit()){ dragX = e.clientX; return; } dragAcc += e.clientX - dragX; dragX = e.clientX; const steps = Math.trunc(dragAcc/12); if (steps){ dragAcc -= steps*12; nudge(steps); } });
-  canvas.addEventListener('pointerup', () => { if (dragging && moved < 6){ tapAt = performance.now(); scatter(); SFX.boop(); } dragging = false; });
+  canvas.addEventListener('pointerup', () => { if (dragging && moved < 6){ tapAt = performance.now(); SFX.boop(); } dragging = false; });
   canvas.addEventListener('pointercancel', () => { dragging = false; });
   const clock = new THREE.Clock();
   function frame(){
@@ -425,21 +428,19 @@ body{ margin:0; background:var(--ground); color:var(--ink); font-family:'Instrum
     const dt = Math.min(0.05, clock.getDelta());
     if (S.running) tick();
     const target = -(shownMs()/MIN)/60 * TAU;
-    twist += (target - twist) * Math.min(1, dt*10); top.rotation.y = twist;
+    twist += (target - twist) * Math.min(1, dt*10); top.rotation.y = twist + yaw;
     rig.rotation.y += (tiltY - rig.rotation.y) * Math.min(1, dt*5); rig.rotation.x += (tiltX - rig.rotation.x) * Math.min(1, dt*5);
-    // tap: every piece pops off at once, then the layers clatter back bottom-up in stepped, mechanical motion
+    // tap: layers separate at once, then drop back in order with a damped bounce; the dome unscrews a little
     const k = (performance.now() - tapAt) / TAP_MS;
     if (k < 1){
       tapping = true;
+      const settle = kk => kk >= 1 ? 0 : Math.exp(-4.5*kk) * Math.abs(Math.cos(kk*Math.PI*2.2));
       for (const P of parts){
-        let kk = Math.min(1, Math.max(0, (k - P.layer*0.07) / 0.78));
-        kk = Math.floor(kk*12)/12;                                            // 12 discrete steps, no smoothing
-        const amp = (1 - kk) * Math.abs(Math.cos(kk*Math.PI*2.5));            // three shrinking bounces
-        const j = P.j, o = P.o;
-        o.position.set(P.p.x + j.x*amp, P.p.y + j.y*amp, P.p.z + j.z*amp);
-        o.rotation.x = P.r.x + j.rx*amp; o.rotation.z = P.r.z + j.rz*amp;
+        const f = settle(Math.min(1, Math.max(0, (k - P.layer*0.06) / 0.7)));
+        P.o.position.y = P.y0 + P.lift * f;
+        if (P.o === top) yaw = 0.35 * f;
       }
-    } else if (tapping){ tapping = false; for (const P of parts){ P.o.position.copy(P.p); P.o.rotation.x = P.r.x; P.o.rotation.z = P.r.z; } }
+    } else if (tapping){ tapping = false; yaw = 0; for (const P of parts) P.o.position.y = P.y0; }
     renderer.render(scene, camera);
   }
 
@@ -474,7 +475,7 @@ body{ margin:0; background:var(--ground); color:var(--ink); font-family:'Instrum
     else if (Date.now() - lastTL > 60000) renderDay();
   }, 500);
   function teardown(){ if (S.running) closeSegment(false); endFlow(); S.running = false; clearInterval(backupTimer); clearInterval(titleFlash); cancelAnimationFrame(raf); cancelPending(); releaseWake(); if (ctx){ try{ ctx.close(); }catch(e){} ctx = null; master = null; } try{ renderer.dispose(); }catch(e){} }
-  window.__ripen = { teardown, segments: () => SEG.slice(), S, lastTap: () => tapAt, pose: () => parts.map(P => +(P.o.position.y - P.p.y).toFixed(3)) };
+  window.__ripen = { teardown, segments: () => SEG.slice(), S, lastTap: () => tapAt, pose: () => parts.map(P => +(P.o.position.y - P.y0).toFixed(3)) };
   window.addEventListener('pagehide', teardown);
 
   // ---------- boot ----------

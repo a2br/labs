@@ -49,7 +49,7 @@ body{ margin:0; background:var(--ground); color:var(--ink); font-family:'Instrum
 .mute svg{ width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
 .mute .off{ display:none; } .mute.muted .off{ display:block; } .mute.muted .on{ display:none; }
 
-.main{ display:grid; grid-template-columns:1fr auto; gap:28px 40px; align-items:center; }
+.main{ display:grid; grid-template-columns:minmax(0,1.3fr) minmax(280px,1fr); gap:28px 24px; align-items:start; }
 .left{ display:flex; flex-direction:column; align-items:flex-start; gap:24px; min-width:0; }
 .modes{ display:inline-flex; height:40px; border:1.5px solid var(--line); border-radius:999px; padding:3px; background:var(--surface); }
 .modes button{ font:inherit; font-weight:600; font-size:14px; letter-spacing:.02em; border:0; background:transparent; color:var(--muted); padding:0 20px; border-radius:999px; cursor:pointer; }
@@ -80,7 +80,7 @@ body{ margin:0; background:var(--ground); color:var(--ink); font-family:'Instrum
 .link{ font:inherit; font-size:14px; font-weight:600; color:var(--muted); background:transparent; border:0; cursor:pointer; height:48px; padding:0 10px; border-radius:999px; display:inline-flex; align-items:center; }
 .link:hover{ color:var(--ink); background:var(--surface); }
 .link:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
-.side{ display:flex; flex-direction:column; align-items:center; gap:6px; }
+.side{ display:flex; flex-direction:column; align-items:center; gap:6px; justify-self:center; margin-top:-30px; }
 #c{ width:264px; height:264px; display:block; image-rendering:pixelated; image-rendering:crisp-edges; touch-action:pan-y; cursor:grab; }
 #c.locked{ cursor:default; }
 
@@ -105,7 +105,7 @@ body{ margin:0; background:var(--ground); color:var(--ink); font-family:'Instrum
 
 @media (max-width:640px){
   .main{ grid-template-columns:1fr; gap:10px; }
-  .side{ order:-1; align-self:center; }
+  .side{ order:-1; align-self:center; margin-top:0; }
   .left{ align-items:center; }
   .actions{ justify-content:center; }
   .btn{ width:100%; }

@@ -55,3 +55,4 @@ Delete the folder and push. The workflow only warns; archive or delete `a2br/<na
 ## Existing projects
 
 - `tautologist` — propositional-logic rewriter for CS-550 (2026-09-18).
+- `pomodoro` — Ripen, work / rest timer with a day timeline and a pixel tomato (2026-09-20).

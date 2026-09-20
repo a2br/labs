@@ -151,7 +151,7 @@ body{ margin:0; background:var(--ground); color:var(--ink); font-family:'Instrum
   if (window.__ripen){ try{ window.__ripen.teardown(); }catch(e){} }
   const $ = s => document.querySelector(s);
   const KEY = 'ripen', VOL = 0.7, TAU = Math.PI*2, MIN = 60000;
-  const S = { mode:'work', durations:{work:25, rest:5}, running:false, endAt:0, remaining:25*MIN, finished:null, muted:false, flow:null, flowSince:0 };
+  const S = { mode:'work', sel:'work', durations:{work:25, rest:5}, running:false, endAt:0, remaining:25*MIN, finished:null, muted:false, flow:null, flowSince:0 };
   const FLOW_CAP = 2; // keep counting past the timer for up to 2x the planned length
   let SEG = [];       // active stretches: {s, e, mode, done}
   let segStart = 0;   // start of the current active stretch
@@ -211,6 +211,8 @@ body{ margin:0; background:var(--ground); color:var(--ink); font-family:'Instrum
   let raf = 0, pending = null, bellAt = 0, wake = null;
   const total = () => S.durations[S.mode] * MIN;
   const fresh = () => !S.running && S.remaining === total();
+  const inProgress = () => S.running || S.remaining !== total();
+  const pendingSwitch = () => S.sel !== S.mode && inProgress();
   const other = m => m === 'work' ? 'rest' : 'work';
   function armBell(c){ cancelPending(); if (!c) return; bellAt = c.currentTime + S.remaining/1000; pending = (S.mode === 'work' ? bell : chime)(c, bellAt); }
   function cancelPending(){ if (!pending) return; pending.nodes.forEach(n => { try{ n.stop(0); }catch(e){} }); try{ pending.gain.disconnect(); }catch(e){} pending = null; }
@@ -241,12 +243,15 @@ body{ margin:0; background:var(--ground); color:var(--ink); font-family:'Instrum
     closeSegment(true);
     const prev = S.mode;
     S.flow = prev; S.flowSince = Date.now(); segStart = Date.now();
-    S.mode = other(prev); S.remaining = total(); S.finished = prev;
+    S.mode = S.sel = other(prev); S.remaining = total(); S.finished = prev;
     render(); flashTitle();
   }
-  function setMode(m, quiet){ if (S.running) stop(true); endFlow(); S.mode = m; S.remaining = total(); S.finished = null; if (!quiet) SFX.click(); render(); save(); }
-  function reset(){ stop(true); endFlow(); S.remaining = total(); S.finished = null; SFX.click(); render(); }
-  function skip(){ stop(true); endFlow(); setMode(other(S.mode)); }
+  // the toggle only selects; nothing in progress is touched until you start the other timer
+  function selectMode(m){ S.sel = m; if (!inProgress()){ S.mode = m; S.remaining = total(); } SFX.click(); render(); save(); }
+  function loadMode(m){ if (S.running) stop(true); endFlow(); S.mode = S.sel = m; S.remaining = total(); S.finished = null; render(); save(); }
+  function primary(){ if (pendingSwitch()){ stop(true); S.mode = S.sel; S.remaining = total(); S.finished = null; start(); } else toggle(); }
+  function reset(){ stop(true); endFlow(); S.sel = S.mode; S.remaining = total(); S.finished = null; SFX.click(); render(); }
+  function skip(){ SFX.click(); loadMode(other(S.mode)); }
   function toggle(){ S.running ? stop() : start(); }
   function setMinutes(n){
     n = Math.max(1, Math.min(60, Math.round(n)));
@@ -266,16 +271,18 @@ body{ margin:0; background:var(--ground); color:var(--ink); font-family:'Instrum
   function render(){
     const rem = S.remaining, t = fmt(rem), isFresh = rem === total(), mins = S.durations[S.mode];
     if (timeEl.textContent !== t) timeEl.textContent = t;
-    document.body.dataset.mode = S.mode;
-    modeWork.setAttribute('aria-pressed', S.mode === 'work'); modeRest.setAttribute('aria-pressed', S.mode === 'rest');
+    document.body.dataset.mode = S.sel;
+    modeWork.setAttribute('aria-pressed', S.sel === 'work'); modeRest.setAttribute('aria-pressed', S.sel === 'rest');
+    const sw = pendingSwitch();
     let sub;
-    if (S.flow) sub = (S.flow === 'work' ? 'Still counting as work, <b>+' + fmt(Date.now() - S.flowSince) + '</b>. Rest when ready.' : 'Still resting, <b>+' + fmt(Date.now() - S.flowSince) + '</b>. Work when ready.');
+    if (sw) sub = (S.running ? (S.mode === 'work' ? 'Working' : 'Resting') : 'Paused ' + S.mode) + ', ' + t + ' left. <b>Start ' + S.sel + '</b> to switch.';
+    else if (S.flow) sub = (S.flow === 'work' ? 'Still counting as work, <b>+' + fmt(Date.now() - S.flowSince) + '</b>. Rest when ready.' : 'Still resting, <b>+' + fmt(Date.now() - S.flowSince) + '</b>. Work when ready.');
     else if (S.finished) sub = S.finished === 'work' ? 'Work done. <b>Rest</b> for ' + mins + (mins === 1 ? ' minute?' : ' minutes?') : 'Rested. Back to <b>work</b> for ' + mins + (mins === 1 ? ' minute?' : ' minutes?');
     else if (S.running) sub = S.mode === 'work' ? '<b>Working.</b> Stay with it.' : '<b>Resting.</b> Look away from the screen.';
     else if (!isFresh) sub = 'Paused';
     else sub = '<b>' + S.mode + '</b> for ' + mins + (mins === 1 ? ' minute' : ' minutes');
     if (subEl.innerHTML !== sub) subEl.innerHTML = sub;
-    startBtn.textContent = S.running ? 'Pause' : (!isFresh && rem > 0 ? 'Resume' : (S.finished ? 'Start ' + S.mode : 'Start'));
+    startBtn.textContent = sw ? 'Start ' + S.sel : S.running ? 'Pause' : (!isFresh && rem > 0 ? 'Resume' : (S.finished ? 'Start ' + S.mode : 'Start'));
     minus.disabled = plus.disabled = !fresh();
     presetBtns.forEach(b => { b.setAttribute('aria-pressed', +b.dataset.w === S.durations.work && +b.dataset.r === S.durations.rest); b.disabled = S.running; });
     canvas.classList.toggle('locked', !fresh());
@@ -389,7 +396,7 @@ body{ margin:0; background:var(--ground); color:var(--ink); font-family:'Instrum
   }
 
   // ---------- controls ----------
-  startBtn.addEventListener('click', toggle);
+  startBtn.addEventListener('click', primary);
   $('#resetBtn').addEventListener('click', reset);
   $('#skipBtn').addEventListener('click', skip);
   minus.addEventListener('click', () => setMinutes(S.durations[S.mode]-1));
@@ -398,19 +405,19 @@ body{ margin:0; background:var(--ground); color:var(--ink); font-family:'Instrum
     const w = +b.dataset.w, r = +b.dataset.r; if (S.running || (w === S.durations.work && r === S.durations.rest)) return;
     S.durations.work = w; S.durations.rest = r; S.remaining = total(); S.finished = null; SFX.ratchet(); render(); save();
   }));
-  modeWork.addEventListener('click', () => { if (S.mode !== 'work') setMode('work'); });
-  modeRest.addEventListener('click', () => { if (S.mode !== 'rest') setMode('rest'); });
+  modeWork.addEventListener('click', () => { if (S.sel !== 'work') selectMode('work'); });
+  modeRest.addEventListener('click', () => { if (S.sel !== 'rest') selectMode('rest'); });
   muteBtn.addEventListener('click', () => { setMuted(!S.muted); if (!S.muted) SFX.click(); });
   document.addEventListener('keydown', e => {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
-    if (e.code === 'Space'){ if (e.target.closest('button')) return; e.preventDefault(); toggle(); }
+    if (e.code === 'Space'){ if (e.target.closest('button')) return; e.preventDefault(); primary(); }
     else if (e.key === 'r' || e.key === 'R') reset();
     else if (e.key === 'n' || e.key === 'N') skip();
     else if (e.key === 'm' || e.key === 'M') setMuted(!S.muted);
     else if (e.key === 'ArrowUp'){ e.preventDefault(); setMinutes(S.durations[S.mode]+1); }
     else if (e.key === 'ArrowDown'){ e.preventDefault(); setMinutes(S.durations[S.mode]-1); }
-    else if (e.key === 'ArrowLeft'){ e.preventDefault(); if (S.mode !== 'work') setMode('work'); }
-    else if (e.key === 'ArrowRight'){ e.preventDefault(); if (S.mode !== 'rest') setMode('rest'); }
+    else if (e.key === 'ArrowLeft'){ e.preventDefault(); if (S.sel !== 'work') selectMode('work'); }
+    else if (e.key === 'ArrowRight'){ e.preventDefault(); if (S.sel !== 'rest') selectMode('rest'); }
   });
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible'){ if (ctx && ctx.state === 'suspended') ctx.resume().catch(()=>{}); if (S.running){ tick(); requestWake(); } else render(); } });
   const backupTimer = setInterval(() => {
@@ -427,6 +434,7 @@ body{ margin:0; background:var(--ground); color:var(--ink); font-family:'Instrum
     load();
     if (hot && hot.S){ Object.assign(S, hot.S); if (S.running){ S.remaining = Math.max(0, S.endAt - Date.now()); S.running = false; } }
     if (S.remaining <= 0 || S.remaining > total()) S.remaining = total();
+    if (!S.sel) S.sel = S.mode;
     twist = -(S.remaining/MIN)/60 * TAU;
     setMuted(S.muted); render(); frame();
     if (hot && hot.S && hot.S.running && S.remaining > 0) start(true);

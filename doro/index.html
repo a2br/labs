@@ -362,7 +362,7 @@ body{ margin:0; background:var(--ground); color:var(--ink); font-family:'Instrum
   const renderer = new THREE.WebGLRenderer({ canvas, antialias:false, alpha:true, powerPreference:'low-power' });
   renderer.setPixelRatio(1); renderer.setSize(106, 106, false); renderer.setClearColor(0x000000, 0);
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 50); camera.position.set(0, 2.0, 7.0); camera.lookAt(0, 0.45, 0);
+  const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 50); camera.position.set(0, 1.5, 5.0); camera.lookAt(0, 0.32, 0);
   const gd = new Uint8Array([90, 160, 225, 255]); const G = new THREE.DataTexture(gd, 4, 1, THREE.LuminanceFormat); G.minFilter = G.magFilter = THREE.NearestFilter; G.needsUpdate = true;
   const toon = hex => new THREE.MeshToonMaterial({ color:hex, gradientMap:G });
   const matRed = toon(0xd9532f), matGreen = toon(0x6b9a5b), flat = new THREE.MeshBasicMaterial({ color:0x2c221b });
@@ -404,9 +404,9 @@ body{ margin:0; background:var(--ground); color:var(--ink); font-family:'Instrum
   const parts = [];
   const reg = (o, layer, lift) => parts.push({ o, layer, lift, y0:o.position.y });
   [bot, ptr, mouth, ...timer.children.filter(o => o.geometry === eyeGeo)].forEach(o => reg(o, 0, 0.04));
-  reg(band, 1, 0.16 - 0.3);
-  reg(top, 2, 0.3);
-  [stem, ...top.children.filter(o => o.material === matGreen && o !== stem)].forEach(o => reg(o, 3, 0.48 - 0.3));
+  reg(band, 1, 0.12 - 0.22);
+  reg(top, 2, 0.22);
+  [stem, ...top.children.filter(o => o.material === matGreen && o !== stem)].forEach(o => reg(o, 3, 0.36 - 0.22));
   let yaw = 0;
   const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.95, 16), new THREE.MeshBasicMaterial({ color:0x2c221b, transparent:true, opacity:0.1 })); shadow.rotation.x = -Math.PI/2; shadow.position.y = -0.8; rig.add(shadow);
 
